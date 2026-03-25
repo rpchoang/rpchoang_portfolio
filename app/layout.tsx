@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const interFont = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const poppinsFont = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -25,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${interFont.variable} ${poppinsFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

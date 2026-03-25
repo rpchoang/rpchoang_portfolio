@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# MD files
+CLAUDE.md
+AGENTS.md
+RESUME.md
+
+# Ignore frame sequences generated for scroll animation (large asset bundle)
+/public/assets/frames/
+/public/assets/frames/*
+
+# If you store frames elsewhere for prod
+/assets/frames/
+/assets/frames/*
