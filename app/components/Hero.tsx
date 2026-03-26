@@ -17,6 +17,7 @@ export default function Hero() {
   const animControllerRef = useRef<AnimationController | null>(null);
   const introTlRef = useRef<gsap.core.Timeline | null>(null);
   const scrollTopArrowRef = useRef<HTMLDivElement>(null);
+  const scrollCTARef = useRef<HTMLDivElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const hasLeftStartRef = useRef(false);
   const [totalFrames] = useState(144); // 6 seconds * 24 fps
@@ -31,6 +32,14 @@ export default function Hero() {
       fallback: `${frameBaseUrl}/ezgif-frame-${fourPadded}.png`
     };
   };
+
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+    ScrollTrigger.clearScrollMemory("manual");
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {
@@ -113,6 +122,9 @@ export default function Hero() {
           start: 'top top',
           end: 'bottom top',
           scrub: 1, // Smooth scrubbing,
+          onLeave: () => {
+            gsap.to(scrollCTARef.current, { autoAlpha: 0, duration: 0.4 });
+          },
           onEnterBack: () => {
             // This is ONLY called when scrolling UP and returning to the start.
             if (animControllerRef.current) {
@@ -164,8 +176,9 @@ export default function Hero() {
                 const eyeX = (rect.left - canvasRect.left) + (198 * scaleX) - 29;
                 const eyeY = (rect.top - canvasRect.top) + (295 * scaleY);
                 animControllerRef.current.fireLaser({ x: eyeX, y: eyeY }, scaleX);
-                // Independently fade in the arrow when the laser fires
+                // Independently fade in the arrow and CTA when the laser fires
                 gsap.to(scrollTopArrowRef.current, { autoAlpha: 1, duration: 0.5 });
+                gsap.to(scrollCTARef.current, { autoAlpha: 1, duration: 0.8, delay: 0.3 });
               }
             }
           } else if (frameIndex > 0) {
@@ -175,8 +188,9 @@ export default function Hero() {
            } else if (frameIndex === 0 && hasLeftStartRef.current) {
              // This is the most reliable way to check for returning to the start of the animation.
              hasLeftStartRef.current = false; // Reset the flag to prevent re-triggering.
-             // Fade out the arrow when returning all the way to the top
+             // Fade out the arrow and CTA when returning all the way to the top
              gsap.to(scrollTopArrowRef.current, { autoAlpha: 0, duration: 0.5 });
+             gsap.to(scrollCTARef.current, { autoAlpha: 0, duration: 0.5 });
              if (animControllerRef.current) {
                const wasDestroyed = animControllerRef.current.isTextDestroyed;
                if (wasDestroyed) {
@@ -294,8 +308,29 @@ export default function Hero() {
     ]);
   };
 
+  // Smooth scroll handler for the navigation bar
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    e.preventDefault();
+    if (targetId === 'home') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    const target = document.getElementById(targetId);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <div ref={containerRef} className="relative h-[300vh] bg-black">
+    <div id="home" ref={containerRef} className="relative h-[300vh] bg-black">
+      {/* Persistent Navigation Bar */}
+      <nav className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex gap-4 md:gap-8 px-6 md:px-8 py-3 bg-white/5 backdrop-blur-md rounded-full border border-white/10">
+        <a href="#home" onClick={(e) => handleNavClick(e, 'home')} className="text-white hover:text-gray-300 transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">Home</a>
+        <a href="#section1" onClick={(e) => handleNavClick(e, 'section1')} className="text-white hover:text-gray-300 transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">Section 1</a>
+        <a href="#section2" onClick={(e) => handleNavClick(e, 'section2')} className="text-white hover:text-gray-300 transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">Section 2</a>
+        <a href="#section3" onClick={(e) => handleNavClick(e, 'section3')} className="text-white hover:text-gray-300 transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">Section 3</a>
+      </nav>
+
       {/* Sticky content container */}
       <div
         ref={stickyRef}
@@ -345,6 +380,26 @@ export default function Hero() {
               <div className="absolute top-0 bottom-0 right-0 w-48 bg-gradient-to-l from-black to-transparent rounded-r-lg pointer-events-none" />
             </div>
           </div>
+      </div>
+
+      {/* Scroll to see my work CTA */}
+      <div
+        ref={scrollCTARef}
+        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none invisible opacity-0"
+      >
+        <span className="heartbeat-glow text-red-500 text-sm font-sans font-medium tracking-[0.2em] uppercase">
+          Scroll to see my work
+        </span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="heartbeat-glow h-5 w-5 text-red-500"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
       </div>
 
       {/* Scroll to top arrow */}
