@@ -156,7 +156,7 @@ export class AnimationController {
   }
 
   public triggerLandingDust() {
-    if (this.isTextDestroyed) return;
+    //if (this.isTextDestroyed) return;
     this.setState(AnimState.DUST_DRIFT);
 
     // The user wants all dust to originate from under the text boxes upon impact.
@@ -223,7 +223,7 @@ export class AnimationController {
   }
 
   public fireLaser(origin?: { x: number; y: number }, scaleFactor: number = 1) {
-    if (this.isTextDestroyed) return;
+    //if (this.isTextDestroyed) return;
     this.scaleFactor = scaleFactor;
     
     if (origin) {
@@ -236,6 +236,7 @@ export class AnimationController {
     this.chargeProgress = 0;
     this.isBeamOn = true;
     this.setState(AnimState.LASER_ACTIVE);
+    
   }
 
   public hideBeam() {
@@ -244,7 +245,7 @@ export class AnimationController {
   }
 
   public showBeam() {
-    if (this.isFiring && !this.isTextDestroyed) {
+    if (this.isFiring) {
       this.isBeamOn = true;
       this.setState(AnimState.LASER_ACTIVE);
     }
@@ -256,12 +257,11 @@ export class AnimationController {
   }
 
   public reset() {
-    if (this.isTextDestroyed) return;
-    
+    this.isTextDestroyed = false;
     this.isFiring = false;
     this.isCharging = false;
     this.chargeProgress = 0;
-    this.pCount = 0;
+    this.pCount = 0; // Clear all particles
     this.laserTipX = this.canvas.width;
     this.currentScanX = this.canvas.width;
     this.isBeamOn = true;
@@ -482,6 +482,11 @@ export class AnimationController {
         if (!isLaserBlasting) {
             x += Math.sin(now * freq + phase) * amp * this.scaleFactor; // Leaf Flutter
         }
+
+        // Make dust particles disappear faster when the laser is firing
+        if (this.isFiring) {
+          life -= (1 / (2.5 * 60)); // Additional decay to make them disappear over ~2.5 seconds
+        }
       }
 
       // Inline External Forces (Mouse Wind & Laser Blast)
@@ -543,9 +548,8 @@ export class AnimationController {
     this.ctx.fillStyle = 'rgba(180, 180, 180, 0.4)';
     this.ctx.fill();
 
-    if (this.laserTipX <= 0 && activeParticles === 0) {
+    if (this.laserTipX <= 0) { // Text is considered destroyed once the laser has passed
       this.isTextDestroyed = true;
-      this.isFiring = false;
     }
     this.ctx.globalAlpha = 1.0;
 

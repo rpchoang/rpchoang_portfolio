@@ -17,6 +17,7 @@ export default function Hero() {
   const animControllerRef = useRef<AnimationController | null>(null);
   const introTlRef = useRef<gsap.core.Timeline | null>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
+  const hasLeftStartRef = useRef(false);
   const [totalFrames] = useState(144); // 6 seconds * 24 fps
   const destructionStartedRef = useRef(false);
   const userScrolledRef = useRef(false);
@@ -110,7 +111,16 @@ export default function Hero() {
           trigger: containerRef.current,
           start: 'top top',
           end: 'bottom top',
-          scrub: 1, // Smooth scrubbing
+          scrub: 1, // Smooth scrubbing,
+          onEnterBack: () => {
+            // This is ONLY called when scrolling UP and returning to the start.
+            if (animControllerRef.current) {
+              const wasDestroyed = animControllerRef.current.isTextDestroyed;
+              animControllerRef.current.reset(true); // Always force reset when scrolling back to top
+              destructionStartedRef.current = false; // Reset this flag
+              introTlRef.current?.restart(); // Always re-play the text fall animation
+            }
+          },
         }
       });
 
@@ -124,6 +134,10 @@ export default function Hero() {
         duration: 2, // Relative duration in timeline
         onUpdate: () => {
           const frameIndex = Math.round(frameObj.frame);
+          if (frameIndex > 0) {
+            hasLeftStartRef.current = true;
+          }
+
           if (imageRef.current && frameIndex !== currentFrame) {
             setCurrentFrame(frameIndex);
             imageRef.current.src = frameFileName(frameIndex).primary;
@@ -154,15 +168,17 @@ export default function Hero() {
           } else if (frameIndex > 0) {
             if (animControllerRef.current) {
               animControllerRef.current.hideBeam();
-            }
-          } else if (frameIndex === 0) {
-            // Rewind state smoothly ONLY when the user scrolls all the way back to the top
-            if (animControllerRef.current) {
-              animControllerRef.current.reset();
-              if (!animControllerRef.current.isTextDestroyed) {
-                destructionStartedRef.current = false;
-                introTlRef.current?.restart(); // Re-play the text fall animation
               }
+           } else if (frameIndex === 0 && hasLeftStartRef.current) {
+             // This is the most reliable way to check for returning to the start of the animation.
+             hasLeftStartRef.current = false; // Reset the flag to prevent re-triggering.
+             if (animControllerRef.current) {
+               const wasDestroyed = animControllerRef.current.isTextDestroyed;
+               if (wasDestroyed) {
+                 animControllerRef.current.reset(); // Full reset
+                 destructionStartedRef.current = false;
+                 introTlRef.current?.restart(); // Re-play the text fall animation
+               }
             }
           }
         }
