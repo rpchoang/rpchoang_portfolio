@@ -16,6 +16,7 @@ export default function Hero() {
   const destructionCanvasRef = useRef<HTMLCanvasElement>(null);
   const animControllerRef = useRef<AnimationController | null>(null);
   const introTlRef = useRef<gsap.core.Timeline | null>(null);
+  const scrollTopArrowRef = useRef<HTMLDivElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const hasLeftStartRef = useRef(false);
   const [totalFrames] = useState(144); // 6 seconds * 24 fps
@@ -163,6 +164,8 @@ export default function Hero() {
                 const eyeX = (rect.left - canvasRect.left) + (198 * scaleX) - 29;
                 const eyeY = (rect.top - canvasRect.top) + (295 * scaleY);
                 animControllerRef.current.fireLaser({ x: eyeX, y: eyeY }, scaleX);
+                // Independently fade in the arrow when the laser fires
+                gsap.to(scrollTopArrowRef.current, { autoAlpha: 1, duration: 0.5 });
               }
             }
           } else if (frameIndex > 0) {
@@ -172,6 +175,8 @@ export default function Hero() {
            } else if (frameIndex === 0 && hasLeftStartRef.current) {
              // This is the most reliable way to check for returning to the start of the animation.
              hasLeftStartRef.current = false; // Reset the flag to prevent re-triggering.
+             // Fade out the arrow when returning all the way to the top
+             gsap.to(scrollTopArrowRef.current, { autoAlpha: 0, duration: 0.5 });
              if (animControllerRef.current) {
                const wasDestroyed = animControllerRef.current.isTextDestroyed;
                if (wasDestroyed) {
@@ -340,6 +345,25 @@ export default function Hero() {
               <div className="absolute top-0 bottom-0 right-0 w-48 bg-gradient-to-l from-black to-transparent rounded-r-lg pointer-events-none" />
             </div>
           </div>
+      </div>
+
+      {/* Scroll to top arrow */}
+      <div
+        ref={scrollTopArrowRef}
+        className="fixed bottom-8 right-8 z-50 cursor-pointer invisible opacity-0" // Start hidden, controlled by GSAP
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        title="Scroll to top"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-10 w-10 text-white hover:text-gray-300 transition-colors"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
       </div>
     </div>
   );
