@@ -1,19 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, Poppins } from "next/font/google";
+import { Montserrat, Mr_De_Haviland } from "next/font/google";
 import "./globals.css";
 
-const interFont = Inter({
-  variable: "--font-inter",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "500", "600", "700"],
 });
 
-const poppinsFont = Poppins({
-  variable: "--font-poppins",
+const mrDeHaviland = Mr_De_Haviland({
+  weight: "400",
   subsets: ["latin"],
+  variable: "--font-mr-de-haviland",
   display: "swap",
-  weight: ["400", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -29,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${interFont.variable} ${poppinsFont.variable} h-full antialiased`}
+      className={`${montserrat.variable} ${mrDeHaviland.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

@@ -49,15 +49,15 @@ export default function Hero() {
         };
       }
 
-      // Split text into word units for disintegration effect (avoid breaking inside words)
-      const nameWords = nameRef.current?.querySelectorAll('.word');
-      const introWords = introRef.current?.querySelectorAll('.word');
+      // Split text into letters for disintegration effect
+      const nameLetters = nameRef.current?.querySelectorAll('.letter');
+      const introLetters = introRef.current?.querySelectorAll('.letter');
 
       // Initial visuals
       gsap.set([nameRef.current, introRef.current], { opacity: 1 });
       gsap.set(imageRef.current, { opacity: 1 });
-      if (nameWords) gsap.set(nameWords, { y: 0, rotation: 0, opacity: 1 });
-      if (introWords) gsap.set(introWords, { y: 0, rotation: 0, opacity: 1 });
+      if (nameLetters) gsap.set(nameLetters, { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1, filter: 'blur(0px)' });
+      if (introLetters) gsap.set(introLetters, { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1, filter: 'blur(0px)' });
 
       if (imageRef.current) {
         imageRef.current.src = frameFileName(0).primary;
@@ -79,62 +79,26 @@ export default function Hero() {
         { opacity: 1, filter: 'brightness(100%)', duration: 0.8 },
         '-=0.55');
 
-      ScrollTrigger.create({
-        trigger: containerRef.current,
-        start: 'top top',
-        end: 'bottom top',
-        scrub: 0.5,
-        onUpdate: (self) => {
-          const progress = self.progress;
-          if (nameWords) {
-            gsap.set(nameWords, {
-              y: progress * gsap.utils.random(-50, 50),
-              rotation: progress * gsap.utils.random(-45, 45),
-              opacity: 1 - progress
-            });
-          }
-          if (introWords) {
-            gsap.set(introWords, {
-              y: progress * gsap.utils.random(-30, 30),
-              rotation: progress * gsap.utils.random(-30, 30),
-              opacity: 1 - progress
-            });
-          }
+      // Create a single scroll-bound timeline to sequence the image animation and wind effect
+      const scrollTl = gsap.timeline({
+        scrollTrigger: {
+          trigger: containerRef.current,
+          start: 'top top',
+          end: 'bottom top',
+          scrub: 1, // Smooth scrubbing
         }
       });
 
-      ScrollTrigger.create({
-        trigger: containerRef.current,
-        start: 'top top',
-        end: 'bottom top',
-        scrub: true,
-        onUpdate: (self) => {
-          const progress = self.progress;
-          if (nameWords) {
-            gsap.set(nameWords, {
-              y: progress * gsap.utils.random(-50, 50),
-              rotation: progress * gsap.utils.random(-45, 45),
-              opacity: 1 - progress
-            });
-          }
-          if (introWords) {
-            gsap.set(introWords, {
-              y: progress * gsap.utils.random(-30, 30),
-              rotation: progress * gsap.utils.random(-30, 30),
-              opacity: 1 - progress
-            });
-          }
-        }
-      });
+      const frameObj = { frame: 0 };
 
-      ScrollTrigger.create({
-        trigger: containerRef.current,
-        start: 'top top',
-        end: 'bottom top',
-        scrub: true,
-        invalidateOnRefresh: true,
-        onUpdate: (self) => {
-          const frameIndex = Math.round(self.progress * (totalFrames - 1));
+      // 1. Play the image sequence first
+      scrollTl.to(frameObj, {
+        frame: totalFrames - 1,
+        snap: "frame",
+        ease: "none",
+        duration: 2, // Relative duration in timeline
+        onUpdate: () => {
+          const frameIndex = frameObj.frame;
           if (imageRef.current && frameIndex !== currentFrame) {
             setCurrentFrame(frameIndex);
             imageRef.current.src = frameFileName(frameIndex).primary;
@@ -146,6 +110,35 @@ export default function Hero() {
           }
         }
       });
+
+      // 2. Disintegrate letters after image sequence completes
+      if (nameLetters && nameLetters.length > 0) {
+        scrollTl.to(nameLetters, {
+          x: () => gsap.utils.random(-1500, -800), // Blow far left
+          y: () => gsap.utils.random(-500, 500),   // Spread out vertically
+          rotation: () => gsap.utils.random(-90, 90), // Spin around
+          scale: () => gsap.utils.random(0.1, 0.5), // Shrink like dust
+          opacity: 0,
+          filter: 'blur(16px)', // Disintegrate into dust
+          ease: 'power2.inOut',
+          stagger: { amount: 1.5, from: 'end' }, // Gust of wind hits the right side first
+          duration: 2
+        }, "disintegrate"); // Label ensures both texts blow away together
+      }
+
+      if (introLetters && introLetters.length > 0) {
+        scrollTl.to(introLetters, {
+          x: () => gsap.utils.random(-1500, -800),
+          y: () => gsap.utils.random(-500, 500),
+          rotation: () => gsap.utils.random(-90, 90),
+          scale: () => gsap.utils.random(0.1, 0.5),
+          opacity: 0,
+          filter: 'blur(16px)',
+          ease: 'power2.inOut',
+          stagger: { amount: 1.5, from: 'end' },
+          duration: 2
+        }, "disintegrate");
+      }
 
       ScrollTrigger.refresh();
     };
@@ -160,22 +153,26 @@ export default function Hero() {
     };
   }, [totalFrames]);
 
-  // Function to split text into words (avoid truncating the middle of words when the scroll effect runs)
+  // Function to split text into letters for the dust disintegration effect
   const splitText = (text: string) => {
     const words = text.split(' ');
-    return words.map((word, index) => (
-      <span key={`${word}-${index}`} className="word inline-block whitespace-nowrap">
-        {word}
-        {index < words.length - 1 ? '\u00A0' : ''}
-      </span>
-    ));
+    return words.map((word, wordIndex) => [
+      <span key={`${word}-${wordIndex}`} className="word inline-block whitespace-nowrap">
+        {word.split('').map((char, charIndex) => (
+          <span key={`${char}-${charIndex}`} className="letter inline-block">
+            {char}
+          </span>
+        ))}
+      </span>,
+      wordIndex < words.length - 1 ? ' ' : ''
+    ]);
   };
 
   return (
     <div>
       <div
         ref={containerRef}
-        className="relative h-[200vh] bg-black"
+        className="relative h-[300vh] bg-black"
       >
         {/* Sticky content container */}
         <div className="sticky top-0 h-screen flex items-center justify-center">
@@ -183,15 +180,20 @@ export default function Hero() {
           <div className="flex-1 text-center mr-8">
             <h1
               ref={nameRef}
-              className="text-6xl md:text-8xl font-bold text-white mb-6 font-mono tracking-wider"
+              className="text-8xl md:text-[10rem] lg:text-[12rem] leading-none text-white font-cursive relative z-0"
             >
-              {splitText("RONALD HOANG")}
+              {splitText("Ronald Hoang")}
             </h1>
             <p
               ref={introRef}
-              className="text-xl md:text-2xl text-gray-300 max-w-2xl mx-auto leading-relaxed"
+              className="text-lg md:text-xl text-gray-300 max-w-3xl mx-auto leading-tight font-sans text-balance -mt-4 relative z-10"
             >
-              {splitText("Software Engineer specializing in high-performance C++ systems, AI orchestration, and distributed platforms. Building the backbone of networks trusted by Meta and Verizon.")}
+              <span className="block mb-1">{splitText("Software Engineer | Building AI-Native Systems")}</span>
+              <span className="block mb-1">{splitText("Multi-Agent Pipelines | Backend Infrastructure")}</span>
+              <span className="block mb-1">{splitText("Almost failed the Turing Test")}</span>
+              <span className="block text-base md:text-lg text-gray-400 font-medium tracking-widest mt-2">
+                {splitText("AWS · GCP · C++ · Python")}
+              </span>
             </p>
           </div>
 
@@ -205,7 +207,11 @@ export default function Hero() {
                 className="w-[500px] h-[500px] md:w-[600px] md:h-[600px] object-cover rounded-lg shadow-2xl"
               />
               {/* Black fade overlay at bottom */}
-              <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent rounded-b-lg" />
+              <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent rounded-b-lg pointer-events-none" />
+              {/* Black fade overlay at left */}
+              <div className="absolute top-0 bottom-0 left-0 w-48 bg-gradient-to-r from-black to-transparent rounded-l-lg pointer-events-none" />
+              {/* Black fade overlay at right */}
+              <div className="absolute top-0 bottom-0 right-0 w-48 bg-gradient-to-l from-black to-transparent rounded-r-lg pointer-events-none" />
             </div>
           </div>
         </div>
