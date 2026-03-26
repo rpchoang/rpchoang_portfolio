@@ -46,9 +46,9 @@ AGENTS.md
 RESUME.md
 
 # Ignore frame sequences generated for scroll animation (large asset bundle)
-/public/assets/frames/
-/public/assets/frames/*
+/public/assets/hero_landing_frames/
+/public/assets/hero_landing_frames/*
 
 # If you store frames elsewhere for prod
-/assets/frames/
-/assets/frames/*
+/assets/hero_landing_frames/
+/assets/hero_landing_frames/*

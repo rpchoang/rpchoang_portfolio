@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { gsap } from 'gsap/dist/gsap';
-import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
-import { AnimationController, AnimState } from './CyclopsLaserDestroyer';
+import { useEffect, useRef } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { AnimationController } from './CyclopsLaserDestroyer';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -18,12 +18,11 @@ export default function Hero() {
   const introTlRef = useRef<gsap.core.Timeline | null>(null);
   const scrollTopArrowRef = useRef<HTMLDivElement>(null);
   const scrollCTARef = useRef<HTMLDivElement>(null);
-  const [currentFrame, setCurrentFrame] = useState(0);
+  const currentFrameRef = useRef(0);
   const hasLeftStartRef = useRef(false);
-  const [totalFrames] = useState(144); // 6 seconds * 24 fps
+  const totalFrames = 144; // 6 seconds * 24 fps
   const destructionStartedRef = useRef(false);
-  const userScrolledRef = useRef(false);
-  const frameBaseUrl = process.env.NEXT_PUBLIC_FRAME_BASE_URL || '/assets/frames';
+  const frameBaseUrl = process.env.NEXT_PUBLIC_FRAME_BASE_URL || '/assets/hero_landing_frames';
   const frameFileName = (index: number) => {
     const onePadded = String(index + 1).padStart(3, '0');
     const fourPadded = String(index + 1).padStart(4, '0');
@@ -42,29 +41,29 @@ export default function Hero() {
   }, []);
 
   useEffect(() => {
-    const onScroll = () => {
-      userScrolledRef.current = true;
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('scroll', onScroll, { passive: true });
-    }
-
     const initScrollTriggers = () => {
       if (!containerRef.current) {
         setTimeout(initScrollTriggers, 100);
         return;
       }
 
-      // Preload frames for smooth animation
-      for (let i = 0; i < totalFrames; i++) {
+      // Preload frames: first 30 eagerly, the rest during idle time
+      const preloadFrame = (i: number) => {
         const img = new Image();
         img.decoding = 'async';
         img.src = frameFileName(i).primary;
-        img.onerror = () => {
-          img.src = frameFileName(i).fallback;
-        };
+        img.onerror = () => { img.src = frameFileName(i).fallback; };
+      };
+      for (let i = 0; i < Math.min(30, totalFrames); i++) {
+        preloadFrame(i);
       }
+      const requestIdle: (cb: () => void) => void =
+        typeof window !== 'undefined' && 'requestIdleCallback' in window
+          ? (cb) => window.requestIdleCallback(cb)
+          : (cb) => setTimeout(cb, 200);
+      requestIdle(() => {
+        for (let i = 30; i < totalFrames; i++) preloadFrame(i);
+      });
 
       gsap.set([nameRef.current, introRef.current], { opacity: 1 });
       gsap.set(imageRef.current, { opacity: 1 });
@@ -128,8 +127,7 @@ export default function Hero() {
           onEnterBack: () => {
             // This is ONLY called when scrolling UP and returning to the start.
             if (animControllerRef.current) {
-              const wasDestroyed = animControllerRef.current.isTextDestroyed;
-              animControllerRef.current.reset(true); // Always force reset when scrolling back to top
+              animControllerRef.current.reset(); // Always force reset when scrolling back to top
               destructionStartedRef.current = false; // Reset this flag
               introTlRef.current?.restart(); // Always re-play the text fall animation
             }
@@ -151,8 +149,8 @@ export default function Hero() {
             hasLeftStartRef.current = true;
           }
 
-          if (imageRef.current && frameIndex !== currentFrame) {
-            setCurrentFrame(frameIndex);
+          if (imageRef.current && frameIndex !== currentFrameRef.current) {
+            currentFrameRef.current = frameIndex;
             imageRef.current.src = frameFileName(frameIndex).primary;
             imageRef.current.onerror = () => {
               if (imageRef.current) {
@@ -212,9 +210,6 @@ export default function Hero() {
     initScrollTriggers();
 
     return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('scroll', onScroll);
-      }
       ScrollTrigger.getAll().forEach(trigger => trigger.kill());
     };
   }, [totalFrames, frameBaseUrl]);

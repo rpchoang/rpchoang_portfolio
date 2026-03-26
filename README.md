@@ -45,7 +45,7 @@ This site is built to be as high-performance as the systems I develop.
 ## 🎞 Frame Sequence Animation Setup (Hero)
 
 - This project uses a scroll-controlled image sequence (not webm/gif) for smooth frame-by-frame control.
-- Place your frames in `public/assets/frames/` or use a CDN with env variable `NEXT_PUBLIC_FRAME_BASE_URL`.
+- Place your frames in `public/assets/hero_landing_frames/` or use a CDN with env variable `NEXT_PUBLIC_FRAME_BASE_URL`.
 - Frame naming format: `ezgif-frame-0001.png`, `ezgif-frame-0002.png`, ...
 - In code: `src={`${frameBaseUrl}/ezgif-frame-${String(index+1).padStart(4, '0')}.png`}`.
 - Avoid committing large frame directories to Git; use remote storage/CDN for production and only small sample frames in repo.
