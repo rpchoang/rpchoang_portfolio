@@ -25,6 +25,8 @@ export class AnimationController {
   public isFiring = false;
   private chargeProgress = 0;
   private isBeamOn = true;
+  private isTwinkling = false;
+  private twinkleProgress = 0;
 
   // Laser & Particle Physics
   private laserOrigin = { x: 198, y: 295 }; // Base origin
@@ -232,7 +234,9 @@ export class AnimationController {
       this.currentScanX = origin.x;
     }
     this.isFiring = true;
-    this.isCharging = true;
+    this.isTwinkling = true;
+    this.twinkleProgress = 0;
+    this.isCharging = false;
     this.chargeProgress = 0;
     this.isBeamOn = true;
     this.setState(AnimState.LASER_ACTIVE);
@@ -241,14 +245,23 @@ export class AnimationController {
 
   public hideBeam() {
     this.isBeamOn = false;
-    this.isCharging = false; // Also stop charging visuals
+    this.isCharging = false;
+    this.isTwinkling = false;
   }
 
   public showBeam() {
-    if (this.isFiring) {
+    if (!this.isFiring) return;
+    if (!this.isBeamOn) {
+      // Returning after a hideBeam() — restart twinkle/charge from the eye position
+      this.laserTipX = this.laserOrigin.x;
+      this.currentScanX = this.laserOrigin.x;
+      this.isTwinkling = true;
+      this.twinkleProgress = 0;
+      this.isCharging = false;
+      this.chargeProgress = 0;
       this.isBeamOn = true;
-      this.setState(AnimState.LASER_ACTIVE);
     }
+    this.setState(AnimState.LASER_ACTIVE);
   }
 
   public stopLaser() {
@@ -261,6 +274,8 @@ export class AnimationController {
     this.isFiring = false;
     this.isCharging = false;
     this.chargeProgress = 0;
+    this.isTwinkling = false;
+    this.twinkleProgress = 0;
     this.pCount = 0; // Clear all particles
     this.laserTipX = this.canvas.width;
     this.currentScanX = this.canvas.width;
@@ -312,6 +327,16 @@ export class AnimationController {
     const eyeY = this.laserOrigin.y;
     const flicker = Math.random() * 0.3 + 0.7;
 
+    // Advance twinkle (~1 second), then hand off to the charge phase
+    if (this.isTwinkling) {
+      this.twinkleProgress += 1 / 60;
+      if (this.twinkleProgress >= 1) {
+        this.isTwinkling = false;
+        this.isCharging = true;
+        this.chargeProgress = 0;
+      }
+    }
+
     let intensity = 1;
     if (this.isCharging) {
       this.chargeProgress += 0.083; // ~0.2 seconds at 60fps
@@ -323,6 +348,61 @@ export class AnimationController {
     }
 
     this.ctx.globalCompositeOperation = 'screen';
+
+    // 0. Draw pre-fire twinkle / lens-flare sparkle at the eye
+    if (this.isTwinkling && this.isBeamOn) {
+      const t = this.twinkleProgress;
+      // Three quick pulses that build in intensity toward the end
+      const pulse = (0.5 + 0.5 * Math.sin(t * Math.PI * 6)) * (0.4 + 0.6 * t) * flicker;
+
+      // Radial energy glow
+      const glowR = 120 * pulse;
+      if (glowR > 1) {
+        const twinkleGlow = this.ctx.createRadialGradient(eyeX, eyeY, 0, eyeX, eyeY, glowR);
+        twinkleGlow.addColorStop(0, `rgba(255, 120, 120, ${0.9 * pulse})`);
+        twinkleGlow.addColorStop(0.3, `rgba(220, 0, 0, ${0.5 * pulse})`);
+        twinkleGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        this.ctx.fillStyle = twinkleGlow;
+        this.ctx.beginPath();
+        this.ctx.arc(eyeX, eyeY, glowR, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+
+      // 8-point star (4 cardinal + 4 diagonal lines)
+      const starLen = 45 * pulse;
+      const diagLen = 28 * pulse;
+      this.ctx.shadowColor = '#ff4444';
+      this.ctx.shadowBlur = 18 * pulse;
+      this.ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
+      this.ctx.lineWidth = 1.5;
+      for (let a = 0; a < 4; a++) {
+        const angle = (a * Math.PI) / 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(eyeX, eyeY);
+        this.ctx.lineTo(eyeX + Math.cos(angle) * starLen, eyeY + Math.sin(angle) * starLen);
+        this.ctx.stroke();
+      }
+      for (let a = 0; a < 4; a++) {
+        const angle = Math.PI / 4 + (a * Math.PI) / 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(eyeX, eyeY);
+        this.ctx.lineTo(eyeX + Math.cos(angle) * diagLen, eyeY + Math.sin(angle) * diagLen);
+        this.ctx.stroke();
+      }
+
+      // Bright centre dot
+      const dotR = 8 * pulse;
+      if (dotR > 0.5) {
+        this.ctx.beginPath();
+        this.ctx.arc(eyeX, eyeY, dotR, 0, Math.PI * 2);
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${pulse})`;
+        this.ctx.shadowColor = '#ffffff';
+        this.ctx.shadowBlur = 25 * pulse;
+        this.ctx.fill();
+      }
+
+      this.ctx.shadowBlur = 0;
+    }
 
     // 1. Draw Subtle Background Glow
     if (this.isCharging && this.isBeamOn) {
@@ -385,7 +465,7 @@ export class AnimationController {
 
     this.ctx.globalCompositeOperation = 'source-over';
 
-    if (this.isCharging) {
+    if (this.isTwinkling || this.isCharging) {
       this.rafId = requestAnimationFrame(this.render);
       return;
     }
@@ -408,10 +488,14 @@ export class AnimationController {
     }
 
     // Dynamically clip the DOM elements directly (prevents shifting!)
-    for (const bound of this.domBounds) {
-      const clipRight = Math.max(0, bound.rightEdge - this.laserTipX);
-      // Use a generous negative margin on top/left/bottom so shadows aren't cut off abruptly
-      bound.el.style.clipPath = `inset(-100px ${clipRight}px -100px -100px)`;
+    // Skip when text is already destroyed — laserTipX resets to eye origin on scroll-back,
+    // which would calculate clipRight=0 and reveal the destroyed text DOM elements.
+    if (!this.isTextDestroyed) {
+      for (const bound of this.domBounds) {
+        const clipRight = Math.max(0, bound.rightEdge - this.laserTipX);
+        // Use a generous negative margin on top/left/bottom so shadows aren't cut off abruptly
+        bound.el.style.clipPath = `inset(-100px ${clipRight}px -100px -100px)`;
+      }
     }
 
     // Reset shadow for particles
@@ -621,7 +705,7 @@ export class AnimationController {
     }
 
     // Stop the animation loop completely if everything is done
-    if (!this.isFiring && activeParticles === 0 && !this.isCharging) {
+    if (!this.isFiring && activeParticles === 0 && !this.isCharging && !this.isTwinkling) {
       if (this.isTextDestroyed) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       }
@@ -632,6 +716,17 @@ export class AnimationController {
     }
 
     this.rafId = requestAnimationFrame(this.render);
+  }
+
+  /** Suspend rendering + clear live particles without destroying pixel data.
+   *  The controller remains restartable (reset() + setState() still work). */
+  public pause() {
+    this.stopEngine();
+    this.isFiring   = false;
+    this.isCharging = false;
+    this.isTwinkling = false;
+    this.pCount     = 0;
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   public cleanup() {

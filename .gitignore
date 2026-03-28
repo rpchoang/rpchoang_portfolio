@@ -52,3 +52,9 @@ RESUME.md
 # If you store frames elsewhere for prod
 /assets/hero_landing_frames/
 /assets/hero_landing_frames/*
+
+# Large source assets not served by the app
+/public/assets/Simple_Character_Spin_rigid_120PNGs.zip
+/public/assets/about_spin/
+/public/assets/CyborgRonTurn.mp4
+/public/assets/audio/intro_music_2.wav

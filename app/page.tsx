@@ -1,18 +1,28 @@
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import Hero from './components/Hero';
 
+const About = dynamic(() => import('./components/About'), { ssr: false });
+
 export default function Home() {
+  const [showAbout, setShowAbout] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setShowAbout(true); },
+      { rootMargin: '300px' },
+    );
+    if (triggerRef.current) obs.observe(triggerRef.current);
+    return () => obs.disconnect();
+  }, []);
+
   return (
     <main>
       <Hero />
-      {/* Filler content to ensure scrolling */}
-      <div id="section1" className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-4xl">Scroll Test Section 1</div>
-      </div>
-      <div id="section2" className="min-h-screen bg-blue-900 flex items-center justify-center">
-        <div className="text-white text-4xl">Scroll Test Section 2</div>
-      </div>
-      <div id="section3" className="min-h-screen bg-green-900 flex items-center justify-center">
-        <div className="text-white text-4xl">Scroll Test Section 3</div>
+      <div ref={triggerRef}>
+        {showAbout && <About />}
       </div>
     </main>
   );

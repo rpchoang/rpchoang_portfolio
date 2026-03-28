@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"console.log\\(require\\(''ffmpeg-static''\\)\\)\")",
+      "Bash(node scripts/convert-assets.mjs)",
+      "Bash(node -e \"import\\(''sharp''\\).then\\(\\({default:s}\\)=>s\\(''public/assets/hero_landing_frames/ezgif-frame-001.webp''\\).metadata\\(\\).then\\(m=>console.log\\(m.width,m.height\\)\\)\\)\")"
+    ]
+  }
+}
