@@ -15,12 +15,25 @@ const CORNER_BRACKETS = [
 ];
 
 const FIELDS = [
-  { label: 'DESIGNATION', value: 'Ronald Hoang',                  color: 'text-white/95'    },
   { label: 'ROLE',        value: 'Software & Solutions Engineer',  color: 'text-white/95'    },
   { label: 'LOCATION',    value: 'San Francisco Bay Area',         color: 'text-white/95'    },
-  { label: 'CLEARANCE',   value: '[REDACTED]',                     color: 'text-red-300/90'  },
+  { label: 'CLASSIFICATION',   value: '[HIREABLE]',                     color: 'text-red-300/90'  },
   { label: 'STATUS',      value: '● ACTIVE',                       color: 'text-green-400'   },
 ];
+
+const SKILLS_DATA = [
+  { cat: 'LANGUAGES',   items: ['C++ (11/14/17)', 'Python', 'SQL'] },
+  { cat: 'CLOUD',       items: ['AWS', 'GCP', 'Terraform'] },
+  { cat: 'BIG DATA',    items: ['Databricks', 'Delta Lake', 'Redis', 'Lakehouse Architecture'] },
+  { cat: 'AI / ML',     items: ['Gemini API', 'Veo', 'Lyria', 'RAG', 'Multi-Agent Orchestration', 'Co-Pilot', 'Claude Codex', 'Windsurf'] },
+  { cat: 'DEV TOOLS',   items: ['GDB', 'Valgrind', 'Git', 'Docker', 'Kubernetes', 'Linux', 'Jenkins', 'CMocka', 'REST/RPC APIs'] },
+  { cat: 'ENGINEERING', items: ['ETL/ELT Pipelines', 'CI/CD', 'Performance Optimization', 'YANG Data Modeling', 'Observability'] },
+];
+
+const MISSION_LOG_TEXT = `Subject presents with 4+ years of deep embedded and backend software engineering experience, most recently in a classified carrier-grade network infrastructure project serving 350+ global operators. Known associates include AT&T, Meta, and Verizon. Primary weapons of choice: C++ and Python. Subject has demonstrated an unusual capacity for building systems that do not fail, engineering a lock-free logging subsystem using atomic ring buffers and mmap-based persistence that eliminated data loss entirely while reducing latency by 95%. Subject redesigned access control architecture using the Composite design pattern, implementing tiered RBAC that dynamically restricts command visibility based on operator clearance level. Consider subject a threat to legacy codebases. <br /><br />
+                Psychological profile suggests compulsive ownership tendencies. Subject has been observed leading CI/CD pipeline testing integration adoption across entire engineering units, achieving 85%+ code coverage across multiple classified repositories. Deployed automated YANG validation tooling directly into the approval pipeline, intercepting non-compliant changes before they could reach production. Triaged and neutralized 100+ protocol-level incidents per quarter. Does not delegate what can be automated. <br /><br />
+                Recent intelligence indicates subject has expanded operational scope into AI systems. Constructed a fully autonomous multi-agent film production pipeline on GCP, orchestrating Gemini, Veo, and Lyria models through a centralized command agent using deterministic routing and a RAG architecture layer. Developed a proprietary Vocal DNA system for persistent identity across generative outputs. Built a full-stack document intelligence platform with multimodal classification and a KYC verification module capable of cross-referencing government-issued credentials against financial records.`;
+const MISSION_LOG_PARAGRAPHS = MISSION_LOG_TEXT.split(' <br /><br />\n                ');
 
 interface SparkParticle {
   x: number; y: number;
@@ -28,6 +41,16 @@ interface SparkParticle {
   life: number; speed: number;
   size: number;
 }
+
+const SPIN_FRAME_COUNT  = 285;    // total PNGs in public/assets/cyborg-frames/
+const SPIN_SKIP_FRAMES  = 2;     // frame_0001/0002 are the static hold at video start
+const SPIN_FRAMES       = SPIN_FRAME_COUNT - SPIN_SKIP_FRAMES; // 283 spinning frames
+const SPIN_FRAME_W      = 400;   // bitmaps scaled from 640×720 to fit within 800×450
+const SPIN_FRAME_H      = 450;
+const EXTRACT_FPS       = 20;               // frames per second of the extracted sequence
+const DEFAULT_VELOCITY  = EXTRACT_FPS / 60; // frames advanced per render tick at auto-spin speed
+const PULL_STRENGTH   = 0.04;             // fraction of excess velocity shed per tick
+const PX_PER_FRAME    = 6;               // pixels of drag (per pointer event ≈ 1 tick) per frame
 
 const VIDEO_SRC      = '/assets/Page2_background.mp4';
 const PLAYBACK_RATE  = 0.75;
@@ -47,7 +70,19 @@ export default function About() {
   const scanProgressRef  = useRef({ value: 0 });
   const scanAnimatingRef = useRef(false);
   const sparkParticlesRef = useRef<SparkParticle[]>([]);
-  const startScanRevealRef = useRef<() => void>(() => {});
+  const startScanRevealRef  = useRef<() => void>(() => {});
+  const loadingRef          = useRef<HTMLDivElement>(null);
+  const loadingDotsRef      = useRef<HTMLSpanElement>(null);
+  const loadingIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const spinBitmapsRef     = useRef<ImageBitmap[]>([]);  // pre-keyed frames loaded from PNG sequence
+  const spinFrameIdxRef    = useRef(0);                  // float frame index (0..N)
+  const isSpinningRef      = useRef(false);
+  const spinReadyRef       = useRef(false);
+  const startSpinRef       = useRef<() => void>(() => {});
+  const dragVelocityRef    = useRef(0);
+  const isDraggingRef      = useRef(false);
+  const lastPointerXRef    = useRef(0);
+  const dragActiveRef      = useRef(false);
   const rafPausedRef     = useRef(false);
   const rafIdRef         = useRef<number>(0);
   const smoothTopRef     = useRef<[number,number,number]>([128, 128, 128]);
@@ -55,6 +90,8 @@ export default function About() {
   const jumpSmoothingRef = useRef(false);
   const dnaBlurRef       = useRef<HTMLDivElement>(null);
   const dnaStripsRef     = useRef<(HTMLDivElement | null)[]>([]);
+  const spinHintRef      = useRef<HTMLDivElement>(null);
+  const hasInteractedRef = useRef(false);
 
   // Pause videos + RAF when section leaves viewport, resume when it returns
   useEffect(() => {
@@ -73,7 +110,6 @@ export default function About() {
           rafPausedRef.current = true;
           vA.pause();
           vB.pause();
-          cancelAnimationFrame(rafIdRef.current);
         }
       },
       { rootMargin: '100px' },
@@ -82,10 +118,15 @@ export default function About() {
     return () => obs.disconnect();
   }, []);
 
-  // Typing state — empty strings until the sequence starts
-  const [typed, setTyped]             = useState<string[]>(FIELDS.map(() => ''));
+  // Cursor placement state — only updated once per field (~5 times total)
   const [activeField, setActiveField] = useState<number>(-1);
-  const [cursorOn, setCursorOn]       = useState(true);
+  const [activeSkillItem, setActiveSkillItem] = useState<number>(-1);
+  const [activeLog, setActiveLog] = useState<number>(-1);
+  // Direct DOM refs for typed text — avoids per-character re-renders
+  const typedSpanRefs = useRef<(HTMLSpanElement | null)[]>(FIELDS.map(() => null));
+  const fieldTypedSpanRefs = useRef<(HTMLSpanElement | null)[]>(FIELDS.map(() => null));
+  const skillItemTypedSpanRefs = useRef<(HTMLSpanElement | null)[]>(SKILLS_DATA.flatMap(s => s.items).map(() => null));
+  const logTypedSpanRefs = useRef<(HTMLSpanElement | null)[]>(MISSION_LOG_PARAGRAPHS.map(() => null));
 
   // Chroma-key + dynamic lighting from background video
   useEffect(() => {
@@ -99,6 +140,10 @@ export default function About() {
     // Offscreen canvas holds the chroma-keyed image (computed once)
     const keyed  = document.createElement('canvas');
     const kCtx   = keyed.getContext('2d')!;
+
+    // Offscreen canvas for per-frame chroma-keying of the spin video
+    let spinKeyed: HTMLCanvasElement | null = null;
+    let spinKeyedCtx: CanvasRenderingContext2D | null = null;
 
     // Tiny sampler canvas — read pixels from the video cheaply each frame
     const sampler = document.createElement('canvas');
@@ -131,8 +176,46 @@ export default function About() {
       kCtx.putImageData(id, 0, 0);
 
       const tick = () => {
+        // Always reschedule first so the loop survives pause/resume without a restart mechanism.
+        rafIdRef.current = requestAnimationFrame(tick);
+        if (rafPausedRef.current) return;
+
+        // Resolve draw source: pre-keyed bitmap blend when spinning, static pose otherwise
+        let drawSource: HTMLCanvasElement = keyed;
+        const bitmaps = spinBitmapsRef.current;
+        if (isSpinningRef.current && bitmaps.length > 0) {
+          if (spinFrameIdxRef.current < 1) console.log('[spin] tick — bitmaps:', bitmaps.length, 'bitmap[0]:', bitmaps[0].width, 'x', bitmaps[0].height, 'canvas:', canvas.width, 'x', canvas.height, 'keyed:', keyed.width, 'x', keyed.height);
+          // Physics: decay toward DEFAULT_VELOCITY when not dragging (works both directions)
+          if (!isDraggingRef.current) {
+            dragVelocityRef.current += (DEFAULT_VELOCITY - dragVelocityRef.current) * PULL_STRENGTH;
+          }
+          const N = bitmaps.length;
+          spinFrameIdxRef.current = ((spinFrameIdxRef.current + dragVelocityRef.current) % N + N) % N;
+
+          // Lazily create blend canvas — sized to match extracted bitmaps
+          if (!spinKeyed || !spinKeyedCtx) {
+            spinKeyed    = document.createElement('canvas');
+            spinKeyedCtx = spinKeyed.getContext('2d')!;
+            spinKeyed.width  = bitmaps[0].width;
+            spinKeyed.height = bitmaps[0].height;
+          }
+
+          // Snap to nearest frame — blending transparent PNGs causes edge fringing
+          const nearest = Math.round(spinFrameIdxRef.current) % N;
+          spinKeyedCtx.globalCompositeOperation = 'copy';
+          spinKeyedCtx.globalAlpha = 1;
+          spinKeyedCtx.drawImage(bitmaps[nearest], 0, 0);
+          drawSource = spinKeyed;
+        }
+
+        // Sync canvas pixel dimensions to the current source
+        if (canvas.width !== drawSource.width || canvas.height !== drawSource.height) {
+          canvas.width  = drawSource.width;
+          canvas.height = drawSource.height;
+        }
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(keyed, 0, 0);
+        ctx.drawImage(drawSource, 0, 0);
 
         const vidA = vA;
         const vidB = vB;
@@ -236,13 +319,9 @@ export default function About() {
 
           // Re-apply the alpha mask so keyed-out pixels stay transparent
           ctx.globalCompositeOperation = 'destination-in';
-          ctx.drawImage(keyed, 0, 0);
+          ctx.drawImage(drawSource, 0, 0);
 
           ctx.globalCompositeOperation = 'source-over';
-        }
-
-        if (!rafPausedRef.current) {
-          rafIdRef.current = requestAnimationFrame(tick);
         }
       };
       tick();
@@ -419,50 +498,220 @@ export default function About() {
     };
   }, []);
 
-  // Blinking cursor via interval
-  useEffect(() => {
-    const id = setInterval(() => setCursorOn(v => !v), 530);
-    return () => clearInterval(id);
-  }, []);
-
   // Exposed so the GSAP timeline can call it via ref after the hologram opens
   const startTypingRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     startTypingRef.current = () => {
-      let fi = 0; // field index
-      let ci = 0; // char index
+      let stage = 0; // 0: fields, 1: skills, 2: log
+      let fieldIndex = 0, skillCatIndex = 0, skillItemIndex = 0, logIndex = 0;
+      let charIndex = 0;
 
-      setTyped(FIELDS.map(() => ''));
+      // Clear all spans directly — no React re-render
+      typedSpanRefs.current.forEach(s => { if (s) s.textContent = ''; });
+      // Reset all content and cursors
+      fieldTypedSpanRefs.current.forEach(s => s && (s.textContent = ''));
+      skillItemTypedSpanRefs.current.forEach(s => s && (s.innerHTML = ''));
+      logTypedSpanRefs.current.forEach(s => s && (s.textContent = ''));
       setActiveField(0);
+      setActiveSkillItem(-1);
+      setActiveLog(-1);
 
-      const tick = () => {
-        const field = FIELDS[fi];
-        if (!field) {
-          // All fields done — hide cursor after a short hold
-          setTimeout(() => setActiveField(-1), 900);
-          return;
+      // Time-based typing: always finishes in ~TYPING_DURATION_MS regardless of frame rate or JIT
+      const totalChars = FIELDS.reduce((s, f) => s + f.value.length, 0)
+        + SKILLS_DATA.reduce((s, c) => s + `[${c.cat}]`.length + c.items.reduce((si, i) => si + `▸${i}`.length, 0), 0)
+        + MISSION_LOG_PARAGRAPHS.reduce((s, p) => s + p.length, 0);
+
+      const TYPING_DURATION_MS = 8000; // Total duration for all sections
+      const charsPerMs = totalChars / TYPING_DURATION_MS;
+      let lastTime: number | null = null;
+      let rafId = 0;
+
+      const tick = (now: number) => {
+        if (lastTime === null) lastTime = now;
+        const elapsed = now - lastTime;
+        lastTime = now;
+
+        // Type as many chars as elapsed time warrants
+        let budget = Math.max(1, Math.round(charsPerMs * elapsed));
+        while (budget-- > 0) {
+          if (stage === 0) { // Typing FIELDS
+            const field = FIELDS[fieldIndex];
+            if (!field) {
+              stage++; fieldIndex = 0; charIndex = 0; setActiveField(-1); continue;
+            }
+            const span = fieldTypedSpanRefs.current[fieldIndex];
+            if (span && charIndex < field.value.length) {
+              charIndex++;
+              span.textContent = field.value.slice(0, charIndex);
+            } else {
+              fieldIndex++; charIndex = 0;
+              setActiveField(fieldIndex < FIELDS.length ? fieldIndex : -1);
+            }
+          } else if (stage === 1) { // Typing SKILLS
+            const skillCat = SKILLS_DATA[skillCatIndex];
+            if (!skillCat) {
+              stage++; skillCatIndex = 0; skillItemIndex = 0; charIndex = 0; setActiveSkillItem(-1); setActiveLog(0); continue;
+            }
+
+            {
+              const item = skillCat.items[skillItemIndex];
+              if (!item) {
+                skillCatIndex++; skillItemIndex = 0; charIndex = 0;
+                continue;
+              }
+
+              const flatIndex = SKILLS_DATA.slice(0, skillCatIndex).reduce((sum, s) => sum + s.items.length, 0) + skillItemIndex;
+              const itemSpan = skillItemTypedSpanRefs.current[flatIndex];
+              const itemText = item;
+
+              if (itemSpan && (itemSpan.textContent?.length ?? 0) < itemText.length) {
+                if (charIndex === 0) {
+                  setActiveSkillItem(flatIndex);
+                  itemSpan.innerHTML = `<span class="text-red-600/35 mr-1">▸</span>`;
+                }
+                charIndex++;
+                itemSpan.innerHTML = `<span class="text-red-600/35 mr-1">▸</span>${itemText.slice(0, charIndex)}`;
+              } else {
+                skillItemIndex++; charIndex = 0;
+                setActiveSkillItem(-1);
+              }
+            }
+          } else if (stage === 2) { // Typing MISSION LOG
+            const logParagraph = MISSION_LOG_PARAGRAPHS[logIndex];
+            if (!logParagraph) {
+              setActiveLog(-1);
+              cancelAnimationFrame(rafId);
+              return;
+            }
+            const span = logTypedSpanRefs.current[logIndex];
+            if (span && charIndex < logParagraph.length) {
+              if (charIndex === 0) setActiveLog(logIndex);
+              charIndex++;
+              span.textContent = logParagraph.slice(0, charIndex);
+            } else {
+              logIndex++; charIndex = 0;
+              setActiveLog(logIndex < MISSION_LOG_PARAGRAPHS.length ? logIndex : -1);
+            }
+          }
         }
 
-        if (ci < field.value.length) {
-          ci++;
-          const snapshot = fi; // capture for closure
-          setTyped(prev => {
-            const next = [...prev];
-            next[snapshot] = field.value.slice(0, ci);
-            return next;
-          });
-          setTimeout(tick, 0);
-        } else {
-          // Field complete — brief pause, then advance
-          fi++;
-          ci = 0;
-          setActiveField(fi < FIELDS.length ? fi : -1);
-          setTimeout(tick, fi < FIELDS.length ? 40 : 0);
-        }
+        rafId = requestAnimationFrame(tick);
       };
 
-      tick();
+      rafId = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  // Load pre-keyed PNG frames from the cyborg-frames sequence into ImageBitmaps.
+  // Phase 1: fetch all images in parallel (browser manages connection concurrency).
+  // Phase 2: draw each to a shared offscreen canvas sequentially to produce scaled bitmaps.
+  // Phase 3: crossfade the loop seam identically to the old video-extraction path.
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (spinBitmapsRef.current.length > 0) return;
+
+      const urls = Array.from({ length: SPIN_FRAMES }, (_, i) => {
+        const num = String(i + SPIN_SKIP_FRAMES + 1).padStart(4, '0');
+        return `/assets/cyborg-frames/frame_${num}.webp`;
+      });
+
+      // Load, decode, and process images in parallel batches to balance speed and stability.
+      const bitmaps: ImageBitmap[] = [];
+      const batchSize = 30; // Process 30 images at a time
+
+      for (let i = 0; i < urls.length; i += batchSize) {
+        if (cancelled) { bitmaps.forEach(b => b.close()); return; }
+
+        const batchUrls = urls.slice(i, i + batchSize);
+        try {
+          const batchBitmaps = await Promise.all(batchUrls.map(async (url) => {
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            //console.log(`[About.tsx] Loaded spin frame: ${url}`);
+
+            // Each promise needs its own canvas to draw on in parallel
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = SPIN_FRAME_W;
+            tempCanvas.height = SPIN_FRAME_H;
+            const tempCtx = tempCanvas.getContext('2d')!;
+            tempCtx.clearRect(0, 0, SPIN_FRAME_W, SPIN_FRAME_H);
+            tempCtx.drawImage(img, 0, 0, SPIN_FRAME_W, SPIN_FRAME_H);
+            return createImageBitmap(tempCanvas);
+          }));
+          bitmaps.push(...batchBitmaps);
+        } catch (error) {
+          console.error(`[About.tsx] Failed to load a batch of images, aborting spin sequence.`, error);
+          bitmaps.forEach(b => b.close());
+          return;
+        }
+      }
+
+      // Crossfade the last XFADE bitmaps toward the first XFADE to seal the loop seam.
+      const XFADE = Math.min(14, Math.floor(bitmaps.length * 0.05));
+      const blendC = document.createElement('canvas');
+      blendC.width  = SPIN_FRAME_W;
+      blendC.height = SPIN_FRAME_H;
+      const bctx = blendC.getContext('2d')!;
+      for (let j = 0; j < XFADE; j++) {
+        const idx   = bitmaps.length - XFADE + j;
+        const alpha = (j + 1) / (XFADE + 1); // linearly 0→1 as we approach the last frame
+        bctx.clearRect(0, 0, blendC.width, blendC.height);
+        bctx.globalAlpha = 1;
+        bctx.drawImage(bitmaps[idx], 0, 0);   // end-of-loop frame
+        bctx.globalAlpha = alpha;
+        bctx.drawImage(bitmaps[j], 0, 0);     // corresponding start-of-loop frame
+        bctx.globalAlpha = 1;
+        bitmaps[idx].close();
+        bitmaps[idx] = await createImageBitmap(blendC);
+      }
+
+      spinBitmapsRef.current = bitmaps;
+      spinReadyRef.current   = true;
+    };
+
+    load().catch(console.error);
+    return () => { cancelled = true; };
+  }, []);
+
+  // Switches to the spin animation with momentum physics
+  useEffect(() => {
+    startSpinRef.current = () => {
+      console.log('[spin] startSpinRef called — bitmaps:', spinBitmapsRef.current.length);
+      spinFrameIdxRef.current = 0;
+      dragVelocityRef.current = DEFAULT_VELOCITY;
+      dragActiveRef.current   = true;
+      isSpinningRef.current   = true;
+
+      // After 3s, flash [SPIN ME] 3 times if user hasn't interacted yet
+      setTimeout(() => {
+        if (hasInteractedRef.current) return;
+        const hint = spinHintRef.current;
+        if (!hint) return;
+        let flashes = 0;
+        const flash = () => {
+          if (hasInteractedRef.current || flashes >= 3) { hint.style.opacity = '0'; return; }
+          hint.style.opacity = '1';
+          setTimeout(() => { hint.style.opacity = '0'; setTimeout(() => { flashes++; flash(); }, 300); }, 600);
+        };
+        flash();
+      }, 6000);
+
+      const canvas = cyborgCanvasRef.current;
+      console.log('[spin] canvas opacity:', canvas ? getComputedStyle(canvas).opacity : 'no canvas', 'gsap y:', canvas ? gsap.getProperty(canvas, 'y') : 'n/a');
+      if (canvas) {
+        gsap.to(canvas, {
+          y: -10,
+          duration: 2,
+          ease: 'sine.inOut',
+          yoyo: true,
+          repeat: -1,
+        });
+      }
     };
   }, []);
 
@@ -478,7 +727,19 @@ export default function About() {
         duration: 4,
         ease:     'power1.inOut',
         delay:    0.2,
-        onComplete: () => { scanAnimatingRef.current = false; },
+        onComplete: () => {
+          scanAnimatingRef.current = false;
+          // Hide loading indicator
+          if (loadingIntervalRef.current) { clearInterval(loadingIntervalRef.current); loadingIntervalRef.current = null; }
+          if (loadingRef.current) gsap.to(loadingRef.current, { opacity: 0, duration: 0.3 });
+          // Start spin once all frames are loaded (poll until ready)
+          const waitAndSpin = () => {
+            console.log('[spin] waitAndSpin poll — ready:', spinReadyRef.current, 'bitmaps:', spinBitmapsRef.current.length);
+            if (spinReadyRef.current) { console.log('[spin] → calling startSpinRef'); startSpinRef.current(); }
+            else { setTimeout(waitAndSpin, 100); }
+          };
+          waitAndSpin();
+        },
       });
     };
   }, []);
@@ -601,7 +862,7 @@ export default function About() {
     const content  = contentRef.current;
     if (!section || !flash || !hologram || !content) return;
 
-    gsap.set(hologram, { scaleY: 0, opacity: 0 });
+    gsap.set(hologram, { scaleY: 0, opacity: 0, y: 0});
     gsap.set(content,  { opacity: 0 });
 
     const openHologram = () => {
@@ -618,18 +879,56 @@ export default function About() {
     };
 
     const playFlash = () => {
+      console.log('[spin] playFlash fired');
       window.dispatchEvent(new CustomEvent('about-section-enter'));
       gsap.killTweensOf([flash, hologram, content]);
       gsap.killTweensOf(scanProgressRef.current);
       gsap.set(hologram, { scaleY: 0, opacity: 0 });
       gsap.set(content,  { opacity: 0 });
-      setTyped(FIELDS.map(() => ''));
+      typedSpanRefs.current.forEach(s => { if (s) s.textContent = ''; });
       setActiveField(-1);
       scanProgressRef.current.value    = 0;
       scanAnimatingRef.current         = false;
       sparkParticlesRef.current.length = 0;
+      // Reset spin so it re-triggers on replay
+      isSpinningRef.current    = false;
+      spinFrameIdxRef.current  = 0;
+      dragVelocityRef.current  = 0;
+      dragActiveRef.current    = false;
+      isDraggingRef.current    = false;
+      if (cyborgCanvasRef.current) gsap.set(cyborgCanvasRef.current, { opacity: 1, y: 0 });
+      gsap.killTweensOf(cyborgCanvasRef.current);
+      if (loadingIntervalRef.current) { clearInterval(loadingIntervalRef.current); loadingIntervalRef.current = null; }
+      if (loadingRef.current) gsap.set(loadingRef.current, { opacity: 0 });
 
-      const tl = gsap.timeline({ onComplete: () => { openHologram(); startScanRevealRef.current(); } });
+      const tl = gsap.timeline({
+        onComplete: () => {
+          console.log('[spin] playFlash timeline complete → openHologram + startScanReveal');
+          openHologram();
+          startScanRevealRef.current();
+          // Start LOADING indicator
+          const loading = loadingRef.current;
+          const dotsEl  = loadingDotsRef.current;
+          if (loading && dotsEl) {
+            let dots = 0;
+            dotsEl.textContent = '';
+            gsap.set(loading, { opacity: 0 });
+            gsap.to(loading, { opacity: 1, duration: 0.4 });
+            loadingIntervalRef.current = setInterval(() => {
+              dots++;
+              dotsEl.textContent = '.'.repeat(dots);
+              if (dots >= 3) {
+                clearInterval(loadingIntervalRef.current!);
+                loadingIntervalRef.current = null;
+                // Brief pause on "LOADING..." then fade out
+                setTimeout(() => {
+                  if (loadingRef.current) gsap.to(loadingRef.current, { opacity: 0, duration: 0.4 });
+                }, 500);
+              }
+            }, 400);
+          }
+        },
+      });
       for (let i = 0; i < 3; i++) {
         tl.set(flash, { opacity: 0 }, i === 0 ? 0 : '+=0.12')
           .to(flash,  { opacity: 1, duration: 0.05 })
@@ -707,8 +1006,24 @@ export default function About() {
 
       {/* Cyborg image — feet anchored to platform surface */}
       <div
-        className="absolute z-30 pointer-events-none"
-        style={{ left: '1550px', top: '490px', transform: 'translate(-50%, -50%)' }}
+        className="absolute z-30"
+        style={{ left: '1550px', top: '490px', transform: 'translate(-50%, -50%)', touchAction: 'none', cursor: 'grab' }}
+        onPointerDown={(e) => {
+          if (!dragActiveRef.current) return;
+          hasInteractedRef.current = true;
+          isDraggingRef.current   = true;
+          lastPointerXRef.current = e.clientX;
+          (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          if (!isDraggingRef.current) return;
+          const delta = e.clientX - lastPointerXRef.current;
+          // frames per event: right drag = positive = forward spin
+          dragVelocityRef.current = delta / PX_PER_FRAME;
+          lastPointerXRef.current = e.clientX;
+        }}
+        onPointerUp={() => { isDraggingRef.current = false; }}
+        onPointerCancel={() => { isDraggingRef.current = false; }}
       >
         <canvas
           ref={cyborgCanvasRef}
@@ -720,6 +1035,35 @@ export default function About() {
           aria-hidden="true"
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
         />
+        {/* SPIN ME hint — flashes 3x after 3s if user hasn't interacted */}
+        <div
+          ref={spinHintRef}
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          style={{ opacity: 0, transition: 'opacity 0.15s ease' }}
+        >
+          <span
+            className="font-bold tracking-[0.3em] text-2xl text-white select-none"
+            style={{ fontFamily: 'var(--font-orbitron)', textShadow: '0 0 8px #ff2222, 0 0 24px #ff0000, 0 0 60px #cc0000' }}
+          >
+            [SPIN ME]
+          </span>
+        </div>
+
+        {/* LOADING indicator — shown during scan reveal */}
+        <div
+          ref={loadingRef}
+          className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0"
+        >
+          <div className="relative flex items-center justify-center">
+            <div className="absolute w-[200%] h-[400%] bg-red-700/40 blur-3xl rounded-full" />
+            <span
+              className="relative font-bold tracking-[0.25em] text-3xl text-white select-none"
+              style={{ fontFamily: 'var(--font-orbitron)', textShadow: '0 0 8px #ff2222, 0 0 24px #ff0000, 0 0 60px #cc0000' }}
+            >
+              LOADING<span ref={loadingDotsRef} />
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Left-half container */}
@@ -756,12 +1100,14 @@ export default function About() {
 
             {/* Content */}
             <div ref={contentRef}
-              className="relative z-10 h-full flex flex-col p-7 gap-4 overflow-y-auto"
+              className="relative z-10 h-full flex flex-col px-7 pt-4 pb-7 gap-4 overflow-y-auto"
               style={{ fontFamily: 'var(--font-share-tech-mono)' }}
             >
               {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-red-500/25">
-                <span className="text-red-400 text-[13px] tracking-[0.22em]">// SUBJECT_INFO</span>
+                <span className="text-red-400 text-[12px] tracking-[0.22em]">
+                  // SUBJECT <span className="text-[20px]">[<span className="text-white/95">RONALD HOANG</span>]</span>
+                </span>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                   <span className="text-red-500/70 text-[12px] tracking-widest">LIVE</span>
@@ -769,14 +1115,14 @@ export default function About() {
               </div>
 
               {/* Identity fields — typed in one by one */}
-              <div className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2.5 text-[13px]">
+              <div className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[13px]">
                 {FIELDS.map(({ label, color }, i) => (
                   <Fragment key={i}>
                     <span className="text-red-600/60 tracking-widest whitespace-nowrap">{label}</span>
-                    <span className={`tracking-wider ${color} min-h-[1em]`}>
-                      {typed[i]}
+                      <span className={`tracking-wider ${color} min-h-[1em] relative`}>
+                      <span ref={el => { fieldTypedSpanRefs.current[i] = el; }} />
                       {activeField === i && (
-                        <span className={`transition-opacity duration-75 ${cursorOn ? 'opacity-100' : 'opacity-0'}`}>▌</span>
+                        <span className="cursor-blink absolute">▌</span>
                       )}
                     </span>
                   </Fragment>
@@ -789,23 +1135,22 @@ export default function About() {
                 <span className="text-red-600/45 text-[11px] tracking-[0.35em]">CORE_SKILLS</span>
                 <div className="h-px flex-1 bg-red-500/20" />
               </div>
-              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 items-start">
-                {([
-                  { cat: 'LANGUAGES',   items: ['C++ (11/14/17)', 'Python', 'SQL'] },
-                  { cat: 'CLOUD',       items: ['AWS', 'GCP', 'Terraform'] },
-                  { cat: 'DATA',        items: ['Databricks', 'Delta Lake', 'Redis', 'Lakehouse Architecture'] },
-                  { cat: 'AI / ML',     items: ['Gemini API', 'Veo', 'Lyria', 'RAG', 'Multi-Agent Orchestration', 'Co-Pilot', 'Claude Codex', 'Windsurf'] },
-                  { cat: 'DEV TOOLS',   items: ['GDB', 'Valgrind', 'Git', 'Docker', 'Kubernetes', 'Linux', 'Jenkins', 'CMocka', 'REST/RPC'] },
-                  { cat: 'ENGINEERING', items: ['ETL/ELT Pipelines', 'CI/CD', 'Performance Optimization', 'YANG Data Modeling', 'Observability'] },
-                ] as { cat: string; items: string[] }[]).map(({ cat, items }) => (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 items-start min-h-[144px]">
+                {SKILLS_DATA.map(({ cat, items }, catIndex) => (
                   <Fragment key={cat}>
-                    <span className="text-red-500/45 text-[10px] tracking-[0.25em] whitespace-nowrap pt-0.5">[{cat}]</span>
+                    <span className="text-red-600/60 text-[13px] tracking-widest whitespace-nowrap pt-0.5">[{cat}]</span>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                      {items.map(item => (
-                        <span key={item} className="text-[12px] text-white/85 tracking-wide">
-                          <span className="text-red-600/35 mr-1">▸</span>{item}
-                        </span>
-                      ))}
+                      {items.map((item, itemIndex) => {
+                        const flatIndex = SKILLS_DATA.slice(0, catIndex).reduce((sum, s) => sum + s.items.length, 0) + itemIndex;
+                        return (
+                          <span key={item} className="text-[12px] text-white/85 tracking-wide relative min-h-[1em]">
+                            <span ref={el => { skillItemTypedSpanRefs.current[flatIndex] = el; }} />
+                            {activeSkillItem === flatIndex && (
+                              <span className="cursor-blink absolute">▌</span>
+                            )}
+                          </span>
+                        );
+                      })}
                     </div>
                   </Fragment>
                 ))}
@@ -817,12 +1162,14 @@ export default function About() {
                 <span className="text-red-600/45 text-[11px] tracking-[0.35em]">MISSION_LOG</span>
                 <div className="h-px flex-1 bg-red-500/20" />
               </div>
-              <p className="text-white/80 text-[12px] leading-relaxed tracking-wide">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque vehicula
-                sapien vitae justo facilisis, nec dignissim nulla convallis. Fusce gravida
-                orci at diam porttitor. Suspendisse potenti. Vestibulum ante ipsum primis
-                in faucibus orci luctus et ultrices posuere cubilia curae.
-              </p>
+              <div className="flex flex-col text-white/80 text-[14px] leading-normal tracking-wide min-h-[252px] max-h-[40vh] overflow-y-auto pr-1">
+                {MISSION_LOG_PARAGRAPHS.map((_, i) => (
+                  <p key={i} className="relative mb-4 last:mb-0 empty:mb-0">
+                    <span ref={el => { logTypedSpanRefs.current[i] = el; }} />
+                    {activeLog === i && <span className="cursor-blink absolute">▌</span>}
+                  </p>
+                ))}
+              </div>
 
               {/* Footer */}
               <div className="mt-auto flex items-center justify-between text-[11px] text-red-600/35 tracking-widest border-t border-red-500/15 pt-3">

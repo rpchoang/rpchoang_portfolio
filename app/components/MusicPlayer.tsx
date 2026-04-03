@@ -1,26 +1,22 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 
-const INTRO_URL = '/assets/audio/intro_music.mp3';
-const LOOP_URL  = '/assets/audio/intro_music_2.mp3';
-
-const LOOP_CROSSFADE = 0.05; // 50ms seam crossfade, only for intro_music_2 looping itself
-const VOLUME_CAP     = 0.42; // max output — 40% then 30% reduction from full
+const INTRO_URL  = '/assets/audio/intro_music.mp3';
+const LOOP_URL   = '/assets/audio/intro_music_2.mp3';
+const VOLUME_CAP = 0.42;
 
 export default function MusicPlayer() {
-  const [isPlaying, setIsPlaying]   = useState(false);
-  const [volume, setVolume]         = useState(1.0);
-  const [isLoaded, setIsLoaded]     = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume]       = useState(1.0);
+  const [isLoaded, setIsLoaded]   = useState(false);
 
   const audioCtxRef    = useRef<AudioContext | null>(null);
   const masterGainRef  = useRef<GainNode | null>(null);
   const introBufferRef = useRef<AudioBuffer | null>(null);
   const loopBufferRef  = useRef<AudioBuffer | null>(null);
-  const loopTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPlayingRef   = useRef(false);
+  const hasStartedRef  = useRef(false);
 
   // Lazily initialise AudioContext and fetch buffers on first play click.
-  // Avoids creating an AudioContext (and fetching 1.5 MB of audio) on every page load.
   const ensureAudio = (): Promise<AudioContext> => {
     if (audioCtxRef.current) return Promise.resolve(audioCtxRef.current);
 
@@ -52,62 +48,29 @@ export default function MusicPlayer() {
     return () => { audioCtxRef.current?.close(); };
   }, []);
 
-  const cancelLoop = () => {
-    if (loopTimerRef.current) {
-      clearTimeout(loopTimerRef.current);
-      loopTimerRef.current = null;
-    }
-  };
-
-  // Schedules one iteration of intro_music_2 with 50ms crossfade at both seams,
-  // then pre-schedules the next iteration before this one ends.
-  const scheduleLoopIteration = (startAt: number) => {
-    if (!isPlayingRef.current) return;
-    const ctx    = audioCtxRef.current;
-    const buffer = loopBufferRef.current;
-    const gain   = masterGainRef.current;
-    if (!ctx || !buffer || !gain) return;
-
-    const endAt  = startAt + buffer.duration;
-    const nextAt = endAt - LOOP_CROSSFADE;
-
-    const fadeGain = ctx.createGain();
-    fadeGain.gain.setValueAtTime(0,   startAt);
-    fadeGain.gain.linearRampToValueAtTime(1, startAt + LOOP_CROSSFADE); // fade in
-    fadeGain.gain.setValueAtTime(1,   nextAt);
-    fadeGain.gain.linearRampToValueAtTime(0, endAt);                    // fade out
-    fadeGain.connect(gain);
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(fadeGain);
-    source.start(startAt);
-
-    // Pre-schedule next iteration
-    const delay = Math.max(0, (nextAt - ctx.currentTime) * 1000 - 50);
-    loopTimerRef.current = setTimeout(() => scheduleLoopIteration(nextAt), delay);
-  };
-
-  // Plays intro_music once, then hands off sample-accurately to intro_music_2 loop.
+  // Plays the intro once, then hands off sample-accurately to the looping track.
+  // Called exactly once — subsequent play clicks just ctx.resume().
   const startPlayback = () => {
-    const ctx    = audioCtxRef.current;
-    const intro  = introBufferRef.current;
-    const loop   = loopBufferRef.current;
-    const gain   = masterGainRef.current;
+    const ctx   = audioCtxRef.current;
+    const intro = introBufferRef.current;
+    const loop  = loopBufferRef.current;
+    const gain  = masterGainRef.current;
     if (!ctx || !intro || !gain) return;
 
-    const startAt    = ctx.currentTime;
-    const loopStartAt = startAt + intro.duration; // exact sample-accurate hand-off
+    const now         = ctx.currentTime;
+    const loopStartAt = now + intro.duration;
 
-    const source = ctx.createBufferSource();
-    source.buffer = intro;
-    source.connect(gain);
-    source.start(startAt);
+    const introSrc = ctx.createBufferSource();
+    introSrc.buffer = intro;
+    introSrc.connect(gain);
+    introSrc.start(now);
 
     if (loop) {
-      // Pre-schedule first loop iteration 50ms before intro ends so timer fires in time
-      const delay = Math.max(0, (loopStartAt - ctx.currentTime) * 1000 - 50);
-      loopTimerRef.current = setTimeout(() => scheduleLoopIteration(loopStartAt), delay);
+      const loopSrc = ctx.createBufferSource();
+      loopSrc.buffer = loop;
+      loopSrc.loop   = true; // browser handles seamless looping natively
+      loopSrc.connect(gain);
+      loopSrc.start(loopStartAt);
     }
   };
 
@@ -115,16 +78,17 @@ export default function MusicPlayer() {
     if (isPlaying) {
       const ctx = audioCtxRef.current;
       if (!ctx) return;
-      isPlayingRef.current = false;
       setIsPlaying(false);
-      cancelLoop();
       await ctx.suspend();
     } else {
       const ctx = await ensureAudio();
-      isPlayingRef.current = true;
       setIsPlaying(true);
       await ctx.resume();
-      startPlayback();
+      // Only start new nodes on the very first play; subsequent clicks just resume.
+      if (!hasStartedRef.current) {
+        hasStartedRef.current = true;
+        startPlayback();
+      }
     }
   };
 

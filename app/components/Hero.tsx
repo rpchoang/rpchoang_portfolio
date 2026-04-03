@@ -11,11 +11,11 @@ gsap.registerPlugin(ScrollTrigger);
 // These have no dependency on component state or props and must not live inside the component.
 
 const TOTAL_FRAMES = 144; // 6 seconds * 24 fps
-const FRAME_BASE_URL = process.env.NEXT_PUBLIC_FRAME_BASE_URL || '/assets/hero_landing_frames';
+const FRAME_BASE_URL = process.env.NEXT_PUBLIC_FRAME_BASE_URL || '/assets/hero_landing_frames_nobg';
 
 const frameFileName = (index: number) => {
   const padded = String(index + 1).padStart(3, '0');
-  return `${FRAME_BASE_URL}/ezgif-frame-${padded}.webp`;
+  return `${FRAME_BASE_URL}/ezgif-frame-${padded}.png`;
 };
 
 const splitText = (text: string) => {
@@ -575,10 +575,15 @@ export default function Hero() {
 
   return (
     <div id="home" ref={containerRef} className="relative h-[300vh] bg-black">
+      {/* Background atmosphere: radial glow behind character + grain overlay */}
+      <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 70% at 70% 50%, rgba(220,38,38,0.06) 0%, transparent 70%)' }} />
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '256px 256px' }} />
+      </div>
       {/* Persistent Navigation Bar */}
       <nav className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex gap-4 md:gap-8 px-6 md:px-8 py-3 bg-white/5 backdrop-blur-md rounded-full border border-white/10">
-        <a href="#home" onClick={(e) => handleNavClick(e, 'home')} className="text-white hover:text-gray-300 transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">Home</a>
-        <a href="#about" onClick={(e) => handleNavClick(e, 'about')} className="text-white hover:text-gray-300 transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">About</a>
+        <a href="#home" onClick={(e) => handleNavClick(e, 'home')} className="nav-link text-white transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">Home</a>
+        <a href="#about" onClick={(e) => handleNavClick(e, 'about')} className="nav-link text-white transition-colors text-xs md:text-sm font-medium tracking-wider uppercase">About</a>
       </nav>
 
       {/* Sticky content container */}
@@ -624,14 +629,9 @@ export default function Hero() {
               width={600}
               height={500}
               fetchPriority="high"
-              className="w-[500px] h-[500px] md:w-[600px] md:h-[600px] object-cover rounded-lg shadow-2xl"
+              className="w-[500px] h-[500px] md:w-[600px] md:h-[600px] object-cover"
+              style={{ maskImage: 'linear-gradient(to top, transparent 0%, black 25%), linear-gradient(to right, transparent 0%, black 35%, black 65%, transparent 100%)', maskComposite: 'intersect' }}
             />
-            {/* Black fade overlay at bottom */}
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent rounded-b-lg pointer-events-none" />
-            {/* Black fade overlay at left */}
-            <div className="absolute top-0 bottom-0 left-0 w-48 bg-gradient-to-r from-black to-transparent rounded-l-lg pointer-events-none" />
-            {/* Black fade overlay at right */}
-            <div className="absolute top-0 bottom-0 right-0 w-48 bg-gradient-to-l from-black to-transparent rounded-r-lg pointer-events-none" />
           </div>
         </div>
       </div>
@@ -661,6 +661,7 @@ export default function Hero() {
         <button
           ref={scrollTopArrowRef}
           className="cursor-pointer invisible opacity-0 text-white hover:text-gray-300 transition-colors bg-transparent border-0 p-0"
+          tabIndex={-1}
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           aria-label="Scroll to top"
         >

@@ -1,6 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -10,51 +10,62 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Testing
 /coverage
+/__snapshots__/
 
-# next.js
+# Next.js
 /.next/
 /out/
 
-# production
+# SWC cache
+/.swc/
+
+# Production
 /build
 
-# misc
+# Misc
 .DS_Store
+Thumbs.db
 *.pem
 
-# debug
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
+# Environment variables
+# Never commit secrets!
 .env*
 
-# vercel
+# Vercel
 .vercel
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
-# MD files
+# Editor directories
+.vscode/
+.idea/
+
+# Large assets, animation frames, and source files
+# Ignoring these keeps the repository size manageable.
+/public/assets/hero_landing_frames/
+/public/assets/about_spin/
+/public/assets/cyborg-frames/
+/public/assets/hero_landing_frames_nobg/
+/public/assets/Simple_Character_Spin_rigid_120PNGs.zip
+/public/assets/CyborgRonTurn.mp4
+/public/assets/Cyborg+scanner/
+/public/assets/audio/intro_music_2.wav
+/public/assets/Simple_Character_Spin_slow_hq_loopfade.mp4
+/public/assets/dbg_spin_*.png
+
+# Local documents and notes
+/.claude/
 CLAUDE.md
 AGENTS.md
 RESUME.md
-
-# Ignore frame sequences generated for scroll animation (large asset bundle)
-/public/assets/hero_landing_frames/
-/public/assets/hero_landing_frames/*
-
-# If you store frames elsewhere for prod
-/assets/hero_landing_frames/
-/assets/hero_landing_frames/*
-
-# Large source assets not served by the app
-/public/assets/Simple_Character_Spin_rigid_120PNGs.zip
-/public/assets/about_spin/
-/public/assets/CyborgRonTurn.mp4
-/public/assets/audio/intro_music_2.wav

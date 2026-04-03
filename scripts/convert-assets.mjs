@@ -38,4 +38,39 @@ if (!existsSync(mp3Dest)) {
   console.log('intro_music_2.mp3 already exists, skipping.');
 }
 
+// --- 3. about_spin PNG frames → chroma-keyed transparent WebP ---
+const spinDir   = join(root, 'public/assets/about_spin');
+const spinFiles = readdirSync(spinDir).filter(f => f.endsWith('.png'));
+console.log(`\nChroma-keying + converting ${spinFiles.length} spin frames to WebP…`);
+
+let spinDone = 0;
+await Promise.all(
+  spinFiles.map(async (file) => {
+    const src  = join(spinDir, file);
+    const dest = join(spinDir, file.replace('.png', '.webp'));
+
+    // Resize to 500 px tall (keeps ~889 px wide at 1280×720 source), then chroma-key in-place
+    const { data, info } = await sharp(src)
+      .resize(null, 500)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      if (g > 60 && g - r > 15 && g - b > 15) {
+        const gn  = Math.min(1, (g - Math.max(r, b)) / 40);
+        data[i + 3] = Math.round((1 - gn) * 255);
+      }
+    }
+
+    await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+      .webp({ quality: 72, alphaQuality: 85 })
+      .toFile(dest);
+
+    process.stdout.write(`\r  ${++spinDone}/${spinFiles.length}`);
+  })
+);
+console.log('\n  Done. Spin WebP frames written.');
+
 console.log('\nAll conversions complete.');
